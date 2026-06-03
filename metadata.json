@@ -1,0 +1,6 @@
+{
+  "name": "DevBlog Pro",
+  "description": "Professional personal blog with Headless CMS, SEO optimization, Markdown support, and real-time push notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
