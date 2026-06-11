@@ -3,54 +3,63 @@ import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import { Helmet } from 'react-helmet-async';
-import { Clock, Calendar, ArrowLeft, Send } from 'lucide-react';
+import { Clock, Calendar, ArrowLeft, Send, Zap } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAppStore } from '../store';
+import { fetchPostBySlug, fetchComments, createComment } from '../services/api';
 
 export default function PostPage() {
   const { slug } = useParams();
   const { t } = useTranslation();
+  const { fontSize } = useAppStore();
   const [post, setPost] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [authorName, setAuthorName] = useState('');
+  const [isQuickRead, setIsQuickRead] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/posts/${slug}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Not found');
-        return res.json();
-      })
-      .then(data => {
+    if (!slug) return;
+    fetchPostBySlug(slug)
+      .then(async data => {
+        if (!data) throw new Error('Not found');
         setPost(data);
-        return fetch(`/api/comments/${data.id}`);
-      })
-      .then(res => res.json())
-      .then(data => {
-        setComments(data);
+        const commentData = await fetchComments(data.id);
+        setComments(commentData);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [slug]);
 
-  const submitComment = (e: React.FormEvent) => {
+  const submitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !authorName.trim()) return;
+    if (!newComment.trim() || !authorName.trim() || !post) return;
     
-    fetch(`/api/comments/${post.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ author: authorName, text: newComment })
-    })
-    .then(res => res.json())
-    .then(data => {
-      setComments([...comments, data]);
-      setNewComment('');
-    });
+    await createComment(post.id, { author: authorName, text: newComment });
+    
+    const updatedComments = await fetchComments(post.id);
+    setComments(updatedComments);
+    setNewComment('');
   };
 
   if (loading) return <div className="flex justify-center mt-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-white"></div></div>;
   if (!post) return <div className="text-center mt-20 text-2xl font-bold">Post not found</div>;
+
+  // Simple Quick Read mode logic: Filter out mostly standard text to emphasize headings/lists.
+  // We keep headers, bullet points, and codeblocks. Or just show the excerpt and headers.
+  const displayContent = isQuickRead 
+    ? post.content.split('\n').filter((line: string) => line.startsWith('#') || line.startsWith('-') || line.startsWith('*') || line.startsWith('>')).join('\n') || '*No headings/lists found for quick read mode. The author did not structure this post with headings.*'
+    : post.content;
+
+  const displayDate = (dateString?: string) => {
+    try {
+      if (!dateString) return 'Date unknown';
+      return format(new Date(dateString), 'MMMM dd, yyyy');
+    } catch {
+      return 'Date unknown';
+    }
+  };
 
   return (
     <article className="animate-in fade-in duration-500">
@@ -59,12 +68,44 @@ export default function PostPage() {
         <meta name="description" content={post.excerpt} />
         <meta property="og:title" content={post.title} />
         <meta property="og:description" content={post.excerpt} />
+        <meta property="og:type" content="article" />
+        <meta property="article:published_time" content={post.date} />
+        <meta property="article:author" content={post.author} />
+        <script type="application/ld+json">
+          {`
+            {
+              "@context": "https://schema.org",
+              "@type": "BlogPosting",
+              "headline": "${post.title}",
+              "image": [],
+              "author": {
+                "@type": "Person",
+                "name": "${post.author}"
+              },
+              "publisher": {
+                "@type": "Organization",
+                "name": "DevBlog Pro"
+              },
+              "datePublished": "${post.date}",
+              "dateModified": "${post.date}",
+              "description": "${post.excerpt}"
+            }
+          `}
+        </script>
       </Helmet>
 
-      <div className="mb-8">
+      <div className="flex items-center justify-between mb-8">
         <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
           <ArrowLeft className="w-4 h-4" /> {t('post.back')}
         </Link>
+        
+        <button 
+          onClick={() => setIsQuickRead(!isQuickRead)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isQuickRead ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          {isQuickRead ? 'QUICK READ ACTIVE' : 'QUICK READ'}
+        </button>
       </div>
 
       <header className="mb-12">
@@ -74,7 +115,7 @@ export default function PostPage() {
         <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-8">
           <div className="flex items-center gap-1.5">
             <Calendar className="w-4 h-4" />
-            {format(new Date(post.date), 'MMMM dd, yyyy')}
+            {displayDate(post.date)}
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="w-4 h-4" />
@@ -87,17 +128,30 @@ export default function PostPage() {
         </div>
       </header>
 
-      <div className="prose prose-zinc dark:prose-invert max-w-none mb-16 prose-headings:font-bold prose-a:text-blue-600 dark:prose-a:text-blue-400 hover:prose-a:text-blue-500 prose-img:rounded-xl">
-        <ReactMarkdown>{post.content}</ReactMarkdown>
+      {isQuickRead && (
+        <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 rounded-xl text-blue-800 dark:text-blue-300 text-sm flex gap-3 text-left">
+          <Zap className="w-5 h-5 flex-shrink-0" />
+          <p>Super-fast skimming enabled! We've extracted only the main headings and key takeaways for you.</p>
+        </div>
+      )}
+
+      <div className={`prose prose-zinc dark:prose-invert max-w-none mb-16 prose-headings:font-bold prose-a:text-blue-600 dark:prose-a:text-blue-400 hover:prose-a:text-blue-500 prose-img:rounded-xl 
+        ${isQuickRead ? 'prose-h1:text-blue-600 dark:prose-h1:text-blue-400 prose-li:font-bold' : ''}
+        ${fontSize === 'sm' ? 'prose-sm' : fontSize === 'lg' ? 'prose-lg' : 'prose-base'}
+      `}>
+        <ReactMarkdown>{displayContent}</ReactMarkdown>
       </div>
 
-      {/* 3rd Party Comments Mock UI */}
+      {/* Comments Section */}
       <section className="mt-16 pt-10 border-t border-zinc-200 dark:border-zinc-800">
         <h3 className="text-2xl font-bold mb-8 text-zinc-900 dark:text-white">
           {t('post.comments')} ({comments.length})
         </h3>
         
         <div className="space-y-8 mb-10">
+          {comments.length === 0 && (
+             <p className="text-zinc-500 italic border border-dashed border-zinc-200 dark:border-zinc-800 p-6 rounded-xl dark:bg-zinc-900/30">Be the first to share your thoughts!</p>
+          )}
           {comments.map(comment => (
             <div key={comment.id} className="flex gap-4">
               <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-zinc-600 dark:text-zinc-300 flex-shrink-0">
@@ -106,7 +160,7 @@ export default function PostPage() {
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="font-semibold text-zinc-900 dark:text-zinc-100">{comment.author}</span>
-                  <span className="text-xs text-zinc-500">{format(new Date(comment.date), 'MMM dd, yyyy')}</span>
+                  <span className="text-xs text-zinc-500">{displayDate(comment.date)}</span>
                 </div>
                 <p className="text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed">{comment.text}</p>
               </div>

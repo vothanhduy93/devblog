@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "Post": {
+      "title": "Post",
+      "description": "A blog post.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "author": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "readTime": { "type": "number" }
+      },
+      "required": ["title", "slug", "excerpt", "content", "date", "author", "tags", "readTime"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a post.",
+      "type": "object",
+      "properties": {
+        "author": { "type": "string" },
+        "text": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["author", "text", "date"]
+    }
+  },
+  "firestore": {
+    "/posts": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Collection of all blog posts."
+    },
+    "/posts/{postId}/comments": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Comments belonging to a particular post."
+    }
+  }
+}

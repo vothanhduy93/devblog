@@ -6,20 +6,31 @@ import { useAppStore } from './store';
 import { cn } from './lib/utils';
 import { Helmet } from 'react-helmet-async';
 import { format } from 'date-fns';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 
 // Pages
 import HomePage from './pages/HomePage';
 import PostPage from './pages/PostPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
+import { searchPosts } from './services/api';
 
 function App() {
   const { t, i18n } = useTranslation();
-  const { theme, setTheme, language, setLanguage, mfaAuthenticated } = useAppStore();
+  const { theme, setTheme, language, setLanguage, isAuthenticated, setIsAuthenticated, authInitialized, setAuthInitialized, fontSize, setFontSize, layoutDensity, setLayoutDensity } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [notification, setNotification] = useState('');
   const navigate = useNavigate();
+
+  // Listen to Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      setAuthInitialized(true);
+    });
+    return () => unsubscribe();
+  }, [setIsAuthenticated]);
 
   // Apply Theme
   useEffect(() => {
@@ -51,27 +62,37 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  const searchContainerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchQuery('');
+        setSearchResults([]);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Apply Language
   useEffect(() => {
     i18n.changeLanguage(language);
   }, [language, i18n]);
-
-  // Real-time Push Notifications (SSE)
-  useEffect(() => {
-    const eventSource = new EventSource('/api/notifications');
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'NEW_COMMENT') {
-          setNotification(`New comment: ${data.snippet}`);
-          setTimeout(() => setNotification(''), 5000);
-        }
-      } catch (e) {
-        console.error("SSE parse error", e);
-      }
-    };
-    return () => eventSource.close();
-  }, []);
 
   // Search Debounce
   useEffect(() => {
@@ -79,11 +100,9 @@ function App() {
       setSearchResults([]);
       return;
     }
-    const timer = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
-        .then(res => res.json())
-        .then(data => setSearchResults(data))
-        .catch(console.error);
+    const timer = setTimeout(async () => {
+      const results = await searchPosts(searchQuery);
+      setSearchResults(results);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -105,14 +124,6 @@ function App() {
         </script>
       </Helmet>
 
-      {/* Push Notification Toast */}
-      {notification && (
-        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 z-50 animate-in slide-in-from-bottom-5">
-          <Bell className="w-5 h-5" />
-          <span className="text-sm font-medium">{notification}</span>
-        </div>
-      )}
-
       {/* Top Navigation Bar */}
       <nav className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-8 bg-zinc-100/50 dark:bg-zinc-950/50 backdrop-blur-md shrink-0">
         <div className="flex items-center space-x-8">
@@ -124,10 +135,11 @@ function App() {
           </div>
         </div>
 
-        <div className="flex flex-1 justify-end max-w-md mx-6 relative items-center space-x-4">
+        <div ref={searchContainerRef} className="flex flex-1 justify-end max-w-md mx-6 relative items-center space-x-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
             <input 
+              ref={searchInputRef}
               type="text" 
               placeholder="Cmd + K to search..." 
               value={searchQuery}
@@ -154,8 +166,8 @@ function App() {
           </div>
           
           <div className="flex items-center space-x-2 border-l border-zinc-300 dark:border-zinc-800 pl-4">
-            <div className={`w-2 h-2 rounded-full ${mfaAuthenticated ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}></div>
-            <span className="hidden sm:inline-block text-[10px] uppercase tracking-widest text-zinc-500">MFA</span>
+            <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}></div>
+            <span className="hidden sm:inline-block text-[10px] uppercase tracking-widest text-zinc-500">AUTH</span>
           </div>
         </div>
       </nav>
@@ -167,10 +179,16 @@ function App() {
           <div className="mb-8">
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-4 font-bold">Identity</h3>
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-900 flex items-center justify-center text-xs text-white uppercase font-bold">DP</div>
-              <div>
-                <p className="text-sm font-medium">DevBlog</p>
-                <p className="text-[10px] text-zinc-500">Admin</p>
+              {auth.currentUser?.photoURL ? (
+                <img src={auth.currentUser.photoURL} alt="Profile" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-900 flex items-center justify-center text-xs text-white uppercase font-bold">
+                   {auth.currentUser?.displayName?.charAt(0) || 'D'}
+                </div>
+              )}
+              <div className="overflow-hidden">
+                <p className="text-sm font-medium truncate w-full">{auth.currentUser?.displayName || 'DevBlog'}</p>
+                <p className="text-[10px] text-zinc-500 truncate w-full">{auth.currentUser?.email || (isAuthenticated ? 'Admin' : 'Guest')}</p>
               </div>
             </div>
           </div>
@@ -191,6 +209,23 @@ function App() {
                 <div className="flex items-center gap-1 font-medium text-[10px]">
                   <button onClick={() => setLanguage('vi')} className={cn("px-1.5 py-0.5 rounded transition-colors", language === 'vi' ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-500')}>VI</button>
                   <button onClick={() => setLanguage('en')} className={cn("px-1.5 py-0.5 rounded transition-colors", language === 'en' ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-500')}>EN</button>
+                </div>
+              </div>
+              <div className="text-xs p-2 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Font Size</span>
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded p-0.5">
+                    <button onClick={() => setFontSize('sm')} className={cn("px-2 py-1 rounded text-[10px]", fontSize === 'sm' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500')}>SM</button>
+                    <button onClick={() => setFontSize('md')} className={cn("px-2 py-1 rounded text-[10px]", fontSize === 'md' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500')}>MD</button>
+                    <button onClick={() => setFontSize('lg')} className={cn("px-2 py-1 rounded text-[10px]", fontSize === 'lg' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500')}>LG</button>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Density</span>
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded p-0.5">
+                    <button onClick={() => setLayoutDensity('compact')} className={cn("px-2 py-1 rounded text-[10px]", layoutDensity === 'compact' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500')}>Tight</button>
+                    <button onClick={() => setLayoutDensity('comfortable')} className={cn("px-2 py-1 rounded text-[10px]", layoutDensity === 'comfortable' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500')}>Loose</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -247,8 +282,8 @@ function App() {
               <span>API Doc</span>
             </div>
             <div className="text-[10px] flex items-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span className="uppercase tracking-widest font-bold hidden sm:inline">Push Notifications</span>
+              <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+              <span className="uppercase tracking-widest font-bold hidden sm:inline">System Online</span>
             </div>
           </div>
         </section>

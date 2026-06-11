@@ -1,35 +1,33 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ShieldCheck, LogIn } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useAppStore } from '../store';
+import { auth } from '../firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 export default function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { setMfaAuthenticated } = useAppStore();
-  
-  const [step, setStep] = useState(1);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [mfaCode, setMfaCode] = useState('');
+  const { isAuthenticated, setIsAuthenticated } = useAppStore();
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
-      setStep(2);
-    } else {
-      alert('Invalid credentials. Use admin/admin');
-    }
-  };
-
-  const handleMfa = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mfaCode.length === 6) {
-      setMfaAuthenticated(true);
+  React.useEffect(() => {
+    if (isAuthenticated) {
       navigate('/admin');
-    } else {
-      alert('Enter any 6 digit code');
+    }
+  }, [isAuthenticated, navigate]);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      if (result.user) {
+        setIsAuthenticated(true);
+        navigate('/admin');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Failed to login with Google.');
     }
   };
 
@@ -43,51 +41,12 @@ export default function LoginPage() {
         <p className="text-sm text-zinc-500 mt-2">Secure access to Headless CMS</p>
       </div>
 
-      {step === 1 ? (
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Username</label>
-            <input 
-              type="text" 
-              required
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Password</label>
-            <input 
-              type="password" 
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-          <button type="submit" className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium hover:bg-zinc-800 transition-colors flex justify-center items-center gap-2 mt-6">
-            {t('login.step1')} <LogIn className="w-4 h-4" />
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={handleMfa} className="space-y-4 animate-in fade-in slide-in-from-right-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">{t('login.step2')}</label>
-            <input 
-              type="text" 
-              required
-              maxLength={6}
-              value={mfaCode}
-              onChange={e => setMfaCode(e.target.value)}
-              placeholder="000000"
-              className="w-full px-4 py-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-center text-2xl tracking-[0.5em] font-mono"
-            />
-          </div>
-          <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors mt-6">
-            {t('login.button')}
-          </button>
-        </form>
-      )}
+      <button 
+        onClick={handleGoogleLogin} 
+        className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex justify-center items-center gap-2 mt-6"
+      >
+        Sign in with Google
+      </button>
     </div>
   );
 }

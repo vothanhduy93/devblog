@@ -2,14 +2,22 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type ThemeType = 'light' | 'dark' | 'system';
+type FontSize = 'sm' | 'md' | 'lg';
+type LayoutDensity = 'compact' | 'comfortable';
 
 interface AppState {
   theme: ThemeType;
   language: 'en' | 'vi';
-  mfaAuthenticated: boolean;
+  isAuthenticated: boolean;
+  authInitialized: boolean;
+  fontSize: FontSize;
+  layoutDensity: LayoutDensity;
   setTheme: (theme: ThemeType) => void;
   setLanguage: (lang: 'en' | 'vi') => void;
-  setMfaAuthenticated: (status: boolean) => void;
+  setIsAuthenticated: (status: boolean) => void;
+  setAuthInitialized: (status: boolean) => void;
+  setFontSize: (size: FontSize) => void;
+  setLayoutDensity: (density: LayoutDensity) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -17,13 +25,25 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       theme: 'system',
       language: 'vi',
-      mfaAuthenticated: false,
+      isAuthenticated: false,
+      authInitialized: false,
+      fontSize: 'md',
+      layoutDensity: 'comfortable',
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
-      setMfaAuthenticated: (mfaAuthenticated) => set({ mfaAuthenticated }),
+      setIsAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
+      setAuthInitialized: (authInitialized) => set({ authInitialized }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      setLayoutDensity: (layoutDensity) => set({ layoutDensity }),
     }),
     {
       name: 'devblog-preferences',
+      partialize: (state) => ({ 
+        theme: state.theme, 
+        language: state.language, 
+        fontSize: state.fontSize, 
+        layoutDensity: state.layoutDensity 
+      }),
     }
   )
 );

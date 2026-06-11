@@ -14,7 +14,7 @@ app.use(express.json());
 // MOCK HEADLESS CMS DATA (In-Memory)
 // ========================================
 
-const mockPosts = [
+let mockPosts = [
   {
     id: '1',
     title: 'Building a High-Performance Next.js Architecture',
@@ -98,6 +98,38 @@ app.get('/api/posts', (req, res) => {
   res.set('Cache-Control', 'public, max-age=300'); // 5 minutes cache
   const sorted = [...mockPosts].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   res.json(sorted);
+});
+
+// Admin Post Endpoints
+app.post('/api/posts', (req, res) => {
+  const { title, excerpt, content, author, tags, readTime } = req.body;
+  const newPost = {
+    id: Date.now().toString(),
+    title,
+    slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+    excerpt,
+    content,
+    date: new Date().toISOString(),
+    author: author || 'Admin',
+    tags: tags || [],
+    readTime: readTime || 5
+  };
+  mockPosts.push(newPost);
+  commentsDb[newPost.id] = [];
+  res.json(newPost);
+});
+
+app.put('/api/posts/:id', (req, res) => {
+  const index = mockPosts.findIndex(p => p.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Not found' });
+  
+  mockPosts[index] = { ...mockPosts[index], ...req.body };
+  res.json(mockPosts[index]);
+});
+
+app.delete('/api/posts/:id', (req, res) => {
+  mockPosts = mockPosts.filter(p => p.id !== req.params.id);
+  res.json({ success: true });
 });
 
 // 2. Get Post by Slug

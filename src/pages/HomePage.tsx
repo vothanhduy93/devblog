@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Clock, Calendar, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAppStore } from '../store';
+import { fetchPosts } from '../services/api';
 
 export default function HomePage() {
   const { t } = useTranslation();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { layoutDensity } = useAppStore();
 
   useEffect(() => {
-    fetch('/api/posts')
-      .then(res => res.json())
+    fetchPosts()
       .then(data => {
         setPosts(data);
         setLoading(false);
@@ -21,11 +22,21 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-white"></div>
+      <div className="flex justify-center flex-col items-center h-64 gap-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-white"></div>
+        <p className="text-zinc-500 text-sm animate-pulse tracking-widest uppercase">Fetching entries...</p>
       </div>
     );
   }
+
+  const displayDate = (dateString?: string) => {
+    try {
+      if (!dateString) return 'Date unknown';
+      return format(new Date(dateString), 'MMM dd, yyyy');
+    } catch {
+      return 'Date unknown';
+    }
+  };
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -36,7 +47,13 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+      {posts.length === 0 && !loading && (
+        <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+          <p className="text-zinc-500">No content available yet. Check back soon.</p>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${layoutDensity === 'compact' ? 'gap-4 pb-12' : 'gap-6 pb-20'}`}>
         {posts.map((post, index) => (
           <div key={post.id} className={index === 0 
             ? "col-span-1 md:col-span-2 group relative bg-white dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 p-6 rounded-xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors shadow-sm dark:shadow-none" 
@@ -60,7 +77,7 @@ export default function HomePage() {
             {index === 0 && (
               <div className="flex items-center justify-between mt-4">
                 <div className="flex space-x-4 text-xs text-zinc-500">
-                  <span>{format(new Date(post.date), 'MMM dd, yyyy')}</span>
+                  <span>{displayDate(post.date)}</span>
                 </div>
                 <button className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black text-xs font-bold rounded hover:bg-zinc-800 dark:hover:bg-zinc-200 pointer-events-none transition-colors">Read Full Post</button>
               </div>
