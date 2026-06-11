@@ -24,7 +24,12 @@ const resources = {
       "login.button": "Xác nhận",
       "theme.light": "Sáng",
       "theme.dark": "Tối",
-      "theme.system": "Hệ thống"
+      "theme.system": "Hệ thống",
+      "home.latest_insights": "Bài viết mới nhất",
+      "home.no_content": "Chưa có nội dung. Vui lòng quay lại sau.",
+      "home.read_full": "Đọc toàn bộ",
+      "home.headless_cms": "Headless CMS",
+      "home.quick_read": "Chế độ đọc nhanh sẵn sàng"
     }
   },
   en: {
@@ -49,7 +54,12 @@ const resources = {
       "login.button": "Verify",
       "theme.light": "Light",
       "theme.dark": "Dark",
-      "theme.system": "System"
+      "theme.system": "System",
+      "home.latest_insights": "Latest Insights",
+      "home.no_content": "No content available yet. Check back soon.",
+      "home.read_full": "Read Full Post",
+      "home.headless_cms": "Headless CMS",
+      "home.quick_read": "Quick Read Mode Ready"
     }
   }
 };

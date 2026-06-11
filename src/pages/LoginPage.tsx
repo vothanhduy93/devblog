@@ -20,14 +20,17 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
+      // Add custom parameters if needed (e.g., prompt: 'select_account')
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
       const result = await signInWithPopup(auth, provider);
       if (result.user) {
         setIsAuthenticated(true);
         navigate('/admin');
       }
-    } catch (error) {
-      console.error(error);
-      alert('Failed to login with Google.');
+    } catch (error: any) {
+      console.error('Login Error:', error);
+      alert('Failed to login with Google: ' + (error.message || String(error)));
     }
   };
 

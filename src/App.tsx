@@ -62,6 +62,14 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
+  // Apply Font Size global scaling
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (fontSize === 'sm') root.style.fontSize = '14px';
+    else if (fontSize === 'lg') root.style.fontSize = '18px';
+    else root.style.fontSize = '16px';
+  }, [fontSize]);
+
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   const searchContainerRef = React.useRef<HTMLDivElement>(null);
@@ -141,7 +149,7 @@ function App() {
             <input 
               ref={searchInputRef}
               type="text" 
-              placeholder="Cmd + K to search..." 
+              placeholder={t('search.placeholder')} 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="bg-zinc-200 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-3 py-1.5 pl-9 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
@@ -265,8 +273,8 @@ function App() {
 
         {/* Center Content Area */}
         <section className="flex-1 flex flex-col dark:bg-zinc-950 relative overflow-hidden">
-          <div className="p-8 flex-1 overflow-y-auto w-full">
-            <div className="max-w-4xl mx-auto w-full">
+          <div className={`flex-1 overflow-y-auto w-full ${layoutDensity === 'compact' ? 'p-4' : 'p-8'}`}>
+            <div className={`mx-auto w-full ${layoutDensity === 'compact' ? 'max-w-7xl' : 'max-w-4xl'}`}>
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/post/:slug" element={<PostPage />} />

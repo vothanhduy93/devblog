@@ -41,15 +41,15 @@ export default function HomePage() {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-4xl font-light tracking-tight text-zinc-900 dark:text-zinc-100">Latest Insights</h1>
+        <h1 className="text-4xl font-light tracking-tight text-zinc-900 dark:text-zinc-100">{t('home.latest_insights')}</h1>
         <div className="hidden sm:flex space-x-2">
-           <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Headless CMS</span>
+           <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">{t('home.headless_cms')}</span>
         </div>
       </div>
 
       {posts.length === 0 && !loading && (
         <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-          <p className="text-zinc-500">No content available yet. Check back soon.</p>
+          <p className="text-zinc-500">{t('home.no_content')}</p>
         </div>
       )}
 
@@ -63,7 +63,7 @@ export default function HomePage() {
               <span className="text-[10px] font-mono text-blue-500 uppercase flex gap-2 tracking-wider">
                 {post.tags?.map((t: string) => `#${t.toUpperCase().replace(/\s+/g, '')}`).join(' ') || '#GENERAL'}
               </span>
-              <span className="text-[10px] text-zinc-500 hidden sm:inline-block">{post.readTime || 5} min read • Quick Read Mode Ready</span>
+              <span className="text-[10px] text-zinc-500 hidden sm:inline-block">{t('post.read_time', { min: post.readTime || 5 })} • {t('home.quick_read')}</span>
             </div>
             <h2 className={`font-semibold mb-3 transition-colors ${index === 0 ? 'text-2xl text-zinc-900 dark:text-zinc-100' : 'text-lg mt-1 mb-2 text-zinc-800 dark:text-zinc-200'} group-hover:text-blue-500 dark:group-hover:text-blue-400`}>
               <Link to={`/post/${post.slug}`}>
@@ -79,7 +79,7 @@ export default function HomePage() {
                 <div className="flex space-x-4 text-xs text-zinc-500">
                   <span>{displayDate(post.date)}</span>
                 </div>
-                <button className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black text-xs font-bold rounded hover:bg-zinc-800 dark:hover:bg-zinc-200 pointer-events-none transition-colors">Read Full Post</button>
+                <button className="px-4 py-2 bg-zinc-900 dark:bg-white text-white dark:text-black text-xs font-bold rounded hover:bg-zinc-800 dark:hover:bg-zinc-200 pointer-events-none transition-colors">{t('home.read_full')}</button>
               </div>
             )}
           </div>
