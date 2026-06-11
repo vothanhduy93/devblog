@@ -20,9 +20,16 @@ export default function AdminPage() {
   const [editingPost, setEditingPost] = useState<any>(null);
   const [formData, setFormData] = useState({ title: '', excerpt: '', content: '', tags: '' });
 
+  const [error, setError] = useState<string | null>(null);
+
   const loadPosts = async () => {
-    const data = await fetchPosts();
-    setPosts(data);
+    try {
+      const data = await fetchPosts();
+      setPosts(data);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load posts. Check Firebase permissions.');
+    }
   };
 
   useEffect(() => {
@@ -37,8 +44,13 @@ export default function AdminPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this post?')) return;
-    await deletePost(id);
-    loadPosts();
+    try {
+      await deletePost(id);
+      loadPosts();
+    } catch (err) {
+      console.error(err);
+      alert('Error deleting post.');
+    }
   };
 
   const handleEdit = (post: any) => {
@@ -65,14 +77,18 @@ export default function AdminPage() {
       tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
     };
     
-    if (editingPost) {
-      await updatePost(editingPost.id, payload);
-    } else {
-      await createPost(payload);
+    try {
+      if (editingPost) {
+        await updatePost(editingPost.id, payload);
+      } else {
+        await createPost(payload);
+      }
+      setIsModalOpen(false);
+      loadPosts();
+    } catch (err) {
+      console.error(err);
+      alert('Error saving post. Check console or firebase rules.');
     }
-    
-    setIsModalOpen(false);
-    loadPosts();
   };
 
   const displayDate = (dateString?: string) => {
@@ -127,6 +143,11 @@ export default function AdminPage() {
         </div>
 
         <div className="lg:col-span-3">
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl text-red-800 dark:text-red-300 text-sm">
+              {error}
+            </div>
+          )}
           <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm dark:shadow-none">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-zinc-50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800 uppercase text-xs font-semibold text-zinc-500 tracking-wider">

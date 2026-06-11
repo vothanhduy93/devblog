@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc, where } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 
 export async function fetchPosts() {
@@ -15,8 +15,10 @@ export async function fetchPosts() {
 
 export async function fetchPostBySlug(slug: string) {
   try {
-    const posts = await fetchPosts();
-    return posts.find((p: any) => p.slug === slug);
+    const q = query(collection(db, 'posts'), where('slug', '==', slug));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
   } catch (error) {
     console.error(error);
     return null;
@@ -90,12 +92,17 @@ export async function createComment(postId: string, data: any) {
 }
 
 export async function searchPosts(queryStr: string) {
-  const posts = await fetchPosts();
-  const q = queryStr.toLowerCase();
-  if (!q) return [];
-  return posts.filter((p: any) => 
-    (p.title || '').toLowerCase().includes(q) || 
-    (p.excerpt || '').toLowerCase().includes(q) ||
-    (p.tags || []).some((t: string) => t.toLowerCase().includes(q))
-  );
+  try {
+    const posts = await fetchPosts();
+    const q = queryStr.toLowerCase();
+    if (!q) return [];
+    return posts.filter((p: any) => 
+      (p.title || '').toLowerCase().includes(q) || 
+      (p.excerpt || '').toLowerCase().includes(q) ||
+      (p.tags || []).some((t: string) => t.toLowerCase().includes(q))
+    );
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }

@@ -11,13 +11,20 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const { layoutDensity } = useAppStore();
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchPosts()
       .then(data => {
         setPosts(data);
-        setLoading(false);
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setError('Failed to load posts. Missing permissions or database error.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -47,7 +54,13 @@ export default function HomePage() {
         </div>
       </div>
 
-      {posts.length === 0 && !loading && (
+      {error && (
+        <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl text-red-800 dark:text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      {posts.length === 0 && !loading && !error && (
         <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
           <p className="text-zinc-500">{t('home.no_content')}</p>
         </div>
