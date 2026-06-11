@@ -44,20 +44,20 @@ export default function PostPage() {
   };
 
   if (loading) return <div className="flex justify-center mt-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900 dark:border-white"></div></div>;
-  if (!post) return <div className="text-center mt-20 text-2xl font-bold">Post not found</div>;
+  if (!post) return <div className="text-center mt-20 text-2xl font-bold">{t('post.not_found')}</div>;
 
   // Simple Quick Read mode logic: Filter out mostly standard text to emphasize headings/lists.
   // We keep headers, bullet points, and codeblocks. Or just show the excerpt and headers.
   const displayContent = isQuickRead 
-    ? post.content.split('\n').filter((line: string) => line.startsWith('#') || line.startsWith('-') || line.startsWith('*') || line.startsWith('>')).join('\n') || '*No headings/lists found for quick read mode. The author did not structure this post with headings.*'
+    ? post.content.split('\n').filter((line: string) => line.startsWith('#') || line.startsWith('-') || line.startsWith('*') || line.startsWith('>')).join('\n') || t('post.no_quick_read')
     : post.content;
 
   const displayDate = (dateString?: string) => {
     try {
-      if (!dateString) return 'Date unknown';
+      if (!dateString) return t('post.date_unknown');
       return format(new Date(dateString), 'MMMM dd, yyyy');
     } catch {
-      return 'Date unknown';
+      return t('post.date_unknown');
     }
   };
 

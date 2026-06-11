@@ -30,7 +30,11 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error('Login Error:', error);
-      alert('Failed to login with Google: ' + (error.message || String(error)));
+      if (error.code === 'auth/unauthorized-domain') {
+        alert("Firebase auth/unauthorized-domain error!\n\nPlease go to Firebase Console -> Authentication -> Settings -> Authorized domains\nAnd add the following domains:\n- ais-dev-7effeedoscxx7kiqt3nb7w-555345878913.asia-east1.run.app\n- ais-pre-7effeedoscxx7kiqt3nb7w-555345878913.asia-east1.run.app");
+      } else {
+        alert('Failed to login with Google: ' + (error.message || String(error)));
+      }
     }
   };
 
