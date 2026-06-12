@@ -2,11 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
+import rehypeSlug from 'rehype-slug';
+import TableOfContents from '../components/TableOfContents';
+import ReadingProgressBar from '../components/ReadingProgressBar';
+import NewsletterModal from '../components/NewsletterModal';
+import ShareButtons from '../components/ShareButtons';
 import { Helmet } from 'react-helmet-async';
-import { Clock, Calendar, ArrowLeft, Send, Zap } from 'lucide-react';
+import { Clock, Calendar, ArrowLeft, Send, Zap, Bookmark } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAppStore } from '../store';
-import { fetchPostBySlug, fetchComments, createComment } from '../services/api';
+import { fetchPostBySlug, subscribeToComments, createComment, trackPageView } from '../services/api';
+import { useReadingList } from '../hooks/useReadingList';
 
 export default function PostPage() {
   const { slug } = useParams();
@@ -18,18 +24,37 @@ export default function PostPage() {
   const [newComment, setNewComment] = useState('');
   const [authorName, setAuthorName] = useState('');
   const [isQuickRead, setIsQuickRead] = useState(false);
+  const { isSaved, toggleSave } = useReadingList();
 
   useEffect(() => {
     if (!slug) return;
+    let unsubscribe: (() => void) | undefined;
+    
+    // Use a ref or simple boolean to prevent duplicate tracking in strict mode
+    let tracked = false;
+    
     fetchPostBySlug(slug)
-      .then(async data => {
+      .then(async (data: any) => {
         if (!data) throw new Error('Not found');
         setPost(data);
-        const commentData = await fetchComments(data.id);
-        setComments(commentData);
+        
+        if (!tracked) {
+          trackPageView(data.id, data.title);
+          tracked = true;
+        }
+
+        unsubscribe = subscribeToComments(data.id, (commentData) => {
+          setComments(commentData);
+        });
         setLoading(false);
       })
       .catch(() => setLoading(false));
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [slug]);
 
   const submitComment = async (e: React.FormEvent) => {
@@ -38,8 +63,6 @@ export default function PostPage() {
     
     await createComment(post.id, { author: authorName, text: newComment });
     
-    const updatedComments = await fetchComments(post.id);
-    setComments(updatedComments);
     setNewComment('');
   };
 
@@ -52,6 +75,15 @@ export default function PostPage() {
     ? post.content.split('\n').filter((line: string) => line.startsWith('#') || line.startsWith('-') || line.startsWith('*') || line.startsWith('>')).join('\n') || t('post.no_quick_read')
     : post.content;
 
+  const calculateReadTime = (content: string) => {
+    if (!content) return { min: 1, words: 0 };
+    const words = content.trim().split(/\s+/).filter(Boolean).length;
+    return {
+      min: Math.max(1, Math.ceil(words / 200)),
+      words
+    };
+  };
+
   const displayDate = (dateString?: string) => {
     try {
       if (!dateString) return t('post.date_unknown');
@@ -63,11 +95,14 @@ export default function PostPage() {
 
   return (
     <article className="animate-in fade-in duration-500">
+      <ReadingProgressBar />
+      <NewsletterModal />
       <Helmet>
-        <title>{post.title} | {t('blog.title')}</title>
-        <meta name="description" content={post.excerpt} />
-        <meta property="og:title" content={post.title} />
-        <meta property="og:description" content={post.excerpt} />
+        <title>{post.metaTitle || post.title} | {t('blog.title')}</title>
+        <meta name="description" content={post.metaDescription || post.excerpt} />
+        <meta property="og:title" content={post.metaTitle || post.title} />
+        <meta property="og:description" content={post.metaDescription || post.excerpt} />
+        {post.ogImage && <meta property="og:image" content={post.ogImage} />}
         <meta property="og:type" content="article" />
         <meta property="article:published_time" content={post.date} />
         <meta property="article:author" content={post.author} />
@@ -99,13 +134,23 @@ export default function PostPage() {
           <ArrowLeft className="w-4 h-4" /> {t('post.back')}
         </Link>
         
-        <button 
-          onClick={() => setIsQuickRead(!isQuickRead)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isQuickRead ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
-        >
-          <Zap className="w-3.5 h-3.5" />
-          {isQuickRead ? 'QUICK READ ACTIVE' : 'QUICK READ'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => toggleSave({ id: post.id, slug: post.slug, title: post.title, excerpt: post.excerpt, date: post.date, readTime: calculateReadTime(post.content).min })}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSaved(post.id) ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+          >
+            <Bookmark className="w-3.5 h-3.5" fill={isSaved(post.id) ? 'currentColor' : 'none'} />
+            {isSaved(post.id) ? 'SAVED' : 'SAVE FOR LATER'}
+          </button>
+
+          <button 
+            onClick={() => setIsQuickRead(!isQuickRead)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isQuickRead ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {isQuickRead ? 'QUICK READ ACTIVE' : 'QUICK READ'}
+          </button>
+        </div>
       </div>
 
       <header className="mb-12">
@@ -119,11 +164,13 @@ export default function PostPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="w-4 h-4" />
-            {t('post.read_time', { min: post.readTime || 5 })}
+            {t('post.read_time', { min: calculateReadTime(post.content).min })} • {calculateReadTime(post.content).words} words
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700"></span>
-            {post.author}
+            <Link to={`/author/${encodeURIComponent(post.author)}`} className="hover:underline hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+              {post.author}
+            </Link>
           </div>
         </div>
       </header>
@@ -135,11 +182,24 @@ export default function PostPage() {
         </div>
       )}
 
-      <div className={`prose prose-zinc dark:prose-invert max-w-none mb-16 prose-headings:font-bold prose-a:text-blue-600 dark:prose-a:text-blue-400 hover:prose-a:text-blue-500 prose-img:rounded-xl 
-        ${isQuickRead ? 'prose-h1:text-blue-600 dark:prose-h1:text-blue-400 prose-li:font-bold' : ''}
-        ${fontSize === 'sm' ? 'prose-sm' : fontSize === 'lg' ? 'prose-lg' : 'prose-base'}
-      `}>
-        <ReactMarkdown>{displayContent}</ReactMarkdown>
+      <div className="flex flex-col lg:flex-row gap-12 relative items-start">
+        <div className={`flex-1 lg:order-1 min-w-0 prose prose-zinc dark:prose-invert max-w-none mb-16 prose-headings:font-bold prose-headings:scroll-mt-24 prose-a:text-blue-600 dark:prose-a:text-blue-400 hover:prose-a:text-blue-500 prose-img:rounded-xl 
+          ${isQuickRead ? 'prose-h1:text-blue-600 dark:prose-h1:text-blue-400 prose-li:font-bold' : ''}
+          ${fontSize === 'sm' ? 'prose-sm' : fontSize === 'lg' ? 'prose-lg' : 'prose-base'}
+        `}>
+          <div className="block lg:hidden mb-8">
+            <TableOfContents content={displayContent} />
+          </div>
+          <ReactMarkdown rehypePlugins={[rehypeSlug]}>{displayContent}</ReactMarkdown>
+          
+          <div className="mt-12 pt-8 border-t border-zinc-200 dark:border-zinc-800 not-prose">
+            <ShareButtons url={window.location.href} title={post.title} />
+          </div>
+        </div>
+        
+        <div className="hidden lg:block w-64 shrink-0 lg:order-2">
+          <TableOfContents content={displayContent} />
+        </div>
       </div>
 
       {/* Comments Section */}

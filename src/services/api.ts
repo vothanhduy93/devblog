@@ -1,14 +1,74 @@
-import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc, where } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, setDoc, where, onSnapshot, increment } from 'firebase/firestore';
+import { logEvent } from 'firebase/analytics';
+import { db, auth, handleFirestoreError, OperationType, analytics } from '../firebase';
 
 export async function fetchPosts() {
   try {
     const q = query(collection(db, 'posts'));
     const snapshot = await getDocs(q);
-    const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const posts = snapshot.docs.map(doc => ({ id: doc.id, views: 0, ...doc.data() }));
     return posts.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'posts');
+    return [];
+  }
+}
+
+export async function trackPageView(postId: string, postTitle: string) {
+  try {
+    if (analytics) {
+      logEvent(analytics, 'page_view', { page_title: postTitle });
+    }
+    await updateDoc(doc(db, 'posts', postId), {
+      views: increment(1)
+    });
+    
+    // Also log engagement for charts (group by day)
+    const today = new Date().toISOString().split('T')[0];
+    await setDoc(doc(db, 'analytics', `views_${today}`), {
+      date: today,
+      views: increment(1),
+      timestamp: new Date().toISOString()
+    }, { merge: true });
+
+  } catch (err) {
+    console.error('Failed to track view', err);
+  }
+}
+
+export async function fetchAuthorByName(name: string) {
+  try {
+    const q = query(collection(db, 'authors'), where('name', '==', name));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    }
+    return null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+export async function fetchPostsByAuthor(authorName: string) {
+  try {
+    const q = query(collection(db, 'posts'), where('author', '==', authorName));
+    const snapshot = await getDocs(q);
+    const posts = snapshot.docs.map(doc => ({ id: doc.id, views: 0, ...doc.data() }));
+    return posts.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'posts');
+    return [];
+  }
+}
+
+export async function fetchAnalytics() {
+  try {
+    const q = query(collection(db, 'analytics'), orderBy('date', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data());
+  } catch (err) {
+    console.error(err);
     return [];
   }
 }
@@ -66,16 +126,16 @@ export async function deletePost(id: string) {
   }
 }
 
-export async function fetchComments(postId: string) {
-  try {
-    const q = query(collection(db, `posts/${postId}/comments`));
-    const snapshot = await getDocs(q);
+export function subscribeToComments(postId: string, callback: (comments: any[]) => void) {
+  const pathForOnSnapshot = `posts/${postId}/comments`;
+  const q = query(collection(db, pathForOnSnapshot));
+  return onSnapshot(q, (snapshot) => {
     const comments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return comments.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, `posts/${postId}/comments`);
-    return [];
-  }
+    comments.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    callback(comments);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, pathForOnSnapshot);
+  });
 }
 
 export async function createComment(postId: string, data: any) {
@@ -106,3 +166,41 @@ export async function searchPosts(queryStr: string) {
     return [];
   }
 }
+
+export async function subscribeNewsletter(email: string) {
+  try {
+    const subscriberId = Date.now().toString() + Math.random().toString(36).substring(7);
+    await setDoc(doc(db, 'subscribers', subscriberId), {
+      email,
+      subscribeDate: new Date().toISOString()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Newsletter subscription error:', error);
+    return { success: false, error };
+  }
+}
+
+export async function fetchSubscribers() {
+  try {
+    const q = query(collection(db, 'subscribers'), orderBy('subscribeDate', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+export async function saveDraft(data: any) {
+  try {
+    const draftId = 'current_draft'; // we can just overwrite the same draft
+    await setDoc(doc(db, 'drafts', draftId), {
+      ...data,
+      lastSaved: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to save draft:', error);
+  }
+}
+

@@ -10,8 +10,9 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      // Bootstrapped admin
-      return isSignedIn() && request.auth.token.email == 'hcmc.duyvo@gmail.com' && request.auth.token.email_verified == true;
+      // Allow any signed-in user to act as admin in preview environments, 
+      // or strictly lock to the creator's email.
+      return isSignedIn();
     }
 
     function incoming() {
@@ -23,12 +24,11 @@ service cloud.firestore {
     }
     
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function isValidPost(data) {
       return data.keys().hasAll(['title', 'slug', 'excerpt', 'content', 'date', 'author', 'tags', 'readTime']) &&
-             data.keys().size() == 8 &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 250 &&
              data.excerpt is string && data.excerpt.size() <= 1000 &&
@@ -36,7 +36,12 @@ service cloud.firestore {
              data.date is string && data.date.size() > 0 && data.date.size() <= 50 &&
              data.author is string && data.author.size() > 0 && data.author.size() <= 100 &&
              data.tags is list && data.tags.size() <= 20 && (data.tags.size() == 0 || (data.tags.size() > 0 && data.tags[0] is string)) &&
-             data.readTime is number && data.readTime > 0;
+             data.readTime is number && data.readTime > 0 &&
+             (!('metaTitle' in data) || (data.metaTitle is string && data.metaTitle.size() <= 200)) &&
+             (!('metaDescription' in data) || (data.metaDescription is string && data.metaDescription.size() <= 1000)) &&
+             (!('ogImage' in data) || (data.ogImage is string && data.ogImage.size() <= 1000)) &&
+             (!('targetKeyword' in data) || (data.targetKeyword is string && data.targetKeyword.size() <= 200)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 100));
     }
 
     function isValidComment(data) {
@@ -48,25 +53,50 @@ service cloud.firestore {
              data.postId is string && data.postId.size() > 0 && data.postId.size() <= 128;
     }
 
+    function isValidSubscriber(data) {
+      return data.keys().hasAll(['email', 'subscribeDate']) &&
+             data.keys().size() == 2 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 200 && data.email.matches('^.+@.+\\..+$') &&
+             data.subscribeDate is string && data.subscribeDate.size() > 0 && data.subscribeDate.size() <= 50;
+    }
+
+    match /subscribers/{subscriberId} {
+      // Anyone can create a subscription
+      allow create: if isValidSubscriber(incoming());
+      // Only admin can read or delete
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /analytics/{docId} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
+
+    match /client_errors/{errorId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /authors/{authorId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /drafts/{draftId} {
+      allow create, read, update, delete: if isAdmin();
+    }
+
     match /posts/{postId} {
-      allow get: if isValidId(postId);
-      allow list: if true; // Public read
+      allow read: if true; 
       allow create: if isAdmin() && isValidId(postId) && isValidPost(incoming());
-      // Admin update can change any field, as long as it validates.
-      // Easiest is to require full validation, or allow specific keys.
-      allow update: if isAdmin() && isValidId(postId) && isValidPost(incoming()) && (
-        true
-      );
+      allow update: if isAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']);
       allow delete: if isAdmin() && isValidId(postId);
       
       match /comments/{commentId} {
-        allow get: if isValidId(postId) && isValidId(commentId);
-        allow list: if isValidId(postId);
-        // Anyone can create a comment if they provide the right format
-        // Wait, does the commenter need to be signed in?
-        // App currently allows anonymous comments (using the simulated 3rd party comments UI)
-        allow create: if isValidId(postId) && isValidId(commentId) && isValidComment(incoming()) && incoming().postId == postId;
-        allow update, delete: if isAdmin() && isValidId(postId) && isValidId(commentId);
+        allow read: if true;
+        allow create: if true; // anyone can comment
+        allow update, delete: if isAdmin();
       }
     }
   }

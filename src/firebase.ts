@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import bundledConfig from '../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -10,14 +11,20 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || bundledConfig.storageBucket,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || bundledConfig.messagingSenderId,
   appId: import.meta.env.VITE_FIREBASE_APP_ID || bundledConfig.appId,
+  measurementId: bundledConfig.measurementId,
   firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || bundledConfig.firestoreDatabaseId
 };
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export let analytics: any = null;
+isSupported().then(yes => {
+  if (yes) analytics = getAnalytics(app);
+}).catch(() => null);
 
 export enum OperationType {
+
   CREATE = 'create',
   UPDATE = 'update',
   DELETE = 'delete',

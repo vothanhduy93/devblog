@@ -14,13 +14,27 @@ import HomePage from './pages/HomePage';
 import PostPage from './pages/PostPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
+import ReadingListPage from './pages/ReadingListPage';
+import AuthorPage from './pages/AuthorPage';
 import { searchPosts } from './services/api';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+import Newsletter from './components/Newsletter';
 
 function App() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme, language, setLanguage, isAuthenticated, setIsAuthenticated, authInitialized, setAuthInitialized, fontSize, setFontSize, layoutDensity, setLayoutDensity } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('recentSearches');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const navigate = useNavigate();
 
   // Listen to Auth State
@@ -86,6 +100,7 @@ function App() {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setSearchQuery('');
         setSearchResults([]);
+        setIsSearchFocused(false);
       }
     };
     
@@ -115,11 +130,21 @@ function App() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const handleSearchSubmit = (query: string) => {
+    if (!query.trim()) return;
+    const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 5);
+    setRecentSearches(updated);
+    localStorage.setItem('recentSearches', JSON.stringify(updated));
+  };
+
   return (
     <div className="h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans flex flex-col overflow-hidden transition-colors duration-200 select-none">
       <Helmet>
         <title>{t('blog.title')}</title>
         <meta name="description" content={t('blog.subtitle')} />
+        <meta property="og:title" content={t('blog.title')} />
+        <meta property="og:description" content={t('blog.subtitle')} />
+        <meta property="og:type" content="website" />
         {/* Mock Google Analytics Tag */}
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-MOCKABC123"></script>
         <script>
@@ -138,8 +163,9 @@ function App() {
           <Link to="/" className="text-lg font-bold tracking-tighter text-zinc-900 dark:text-white">
             DEVBLOG<span className="text-blue-500">.</span>
           </Link>
-          <div className="hidden sm:flex space-x-6 text-sm font-medium text-zinc-500 dark:text-zinc-400">
-            <Link to="/" className="text-zinc-900 dark:text-white">Articles</Link>
+          <div className="hidden sm:flex items-center space-x-6 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <Link to="/" className="hover:text-zinc-900 dark:hover:text-white">Articles</Link>
+            <Link to="/reading-list" className="hover:text-zinc-900 dark:hover:text-white">Reading List</Link>
           </div>
         </div>
 
@@ -152,25 +178,59 @@ function App() {
               placeholder={t('search.placeholder')} 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearchSubmit(searchQuery);
+              }}
               className="bg-zinc-200 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-md px-3 py-1.5 pl-9 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
             />
             {/* Search Dropdown */}
-            {searchResults.length > 0 && searchQuery && (
+            {(searchResults.length > 0 && searchQuery) || (isSearchFocused && !searchQuery.trim() && recentSearches.length > 0) ? (
               <div className="absolute top-10 right-0 w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl overflow-hidden py-2 z-50 text-left">
-                <div className="px-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">Results</div>
-                {searchResults.map(post => (
-                  <Link 
-                    key={post.id} 
-                    to={`/post/${post.slug}`}
-                    onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                    className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{post.title}</div>
-                    <div className="text-xs text-zinc-500 line-clamp-1 mt-1">{post.excerpt}</div>
-                  </Link>
-                ))}
+                {searchQuery.trim() ? (
+                  <>
+                    <div className="px-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">Results</div>
+                    {searchResults.map(post => (
+                      <Link 
+                        key={post.id} 
+                        to={`/post/${post.slug}`}
+                        onClick={() => { 
+                          handleSearchSubmit(searchQuery);
+                          setSearchQuery(''); 
+                          setSearchResults([]); 
+                          setIsSearchFocused(false);
+                        }}
+                        className="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{post.title}</div>
+                        <div className="text-xs text-zinc-500 line-clamp-1 mt-1">{post.excerpt}</div>
+                      </Link>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <div className="px-3 pb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] flex justify-between items-center">
+                      <span>Recent Searches</span>
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRecentSearches([]); localStorage.removeItem('recentSearches'); }} className="hover:text-zinc-700 dark:hover:text-zinc-300">Clear</button>
+                    </div>
+                    {recentSearches.map((search, idx) => (
+                      <button
+                        key={idx}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setSearchQuery(search);
+                          handleSearchSubmit(search);
+                        }}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors text-sm text-zinc-700 dark:text-zinc-300"
+                      >
+                        <Search className="w-3.5 h-3.5 text-zinc-400" />
+                        {search}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
-            )}
+            ) : null}
           </div>
           
           <div className="flex items-center space-x-2 border-l border-zinc-300 dark:border-zinc-800 pl-4">
@@ -256,6 +316,10 @@ function App() {
           </div>
           
           <div className="mt-6 flex flex-col gap-2">
+            <Newsletter />
+          </div>
+
+          <div className="mt-6 flex flex-col gap-2">
             <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1 font-bold">Feeds</h3>
             <a href="/api/rss" target="_blank" rel="noreferrer" className="text-xs p-2 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded flex items-center justify-between group hover:border-zinc-400 transition-colors">
               <span className="text-zinc-500 italic flex items-center gap-2"><Rss className="w-3.5 h-3.5" />/feed.xml</span>
@@ -273,14 +337,18 @@ function App() {
 
         {/* Center Content Area */}
         <section className="flex-1 flex flex-col dark:bg-zinc-950 relative overflow-hidden">
-          <div className={`flex-1 overflow-y-auto w-full ${layoutDensity === 'compact' ? 'p-4' : 'p-8'}`}>
+          <div id="scroll-container" className={`flex-1 overflow-y-auto w-full ${layoutDensity === 'compact' ? 'p-4' : 'p-8'}`}>
             <div className={`mx-auto w-full ${layoutDensity === 'compact' ? 'max-w-7xl' : 'max-w-4xl'}`}>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/post/:slug" element={<PostPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/admin" element={<AdminPage />} />
-              </Routes>
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/post/:slug" element={<PostPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/author/:authorId" element={<AuthorPage />} />
+                  <Route path="/reading-list" element={<ReadingListPage />} />
+                </Routes>
+              </ErrorBoundary>
             </div>
           </div>
 

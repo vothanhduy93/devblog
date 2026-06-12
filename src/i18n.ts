@@ -85,7 +85,13 @@ const resources = {
       "home.no_content": "Chưa có nội dung. Vui lòng quay lại sau.",
       "home.read_full": "Đọc toàn bộ",
       "home.headless_cms": "Headless CMS",
-      "home.quick_read": "Chế độ đọc nhanh sẵn sàng"
+      "home.quick_read": "Chế độ đọc nhanh sẵn sàng",
+      "newsletter.title": "Bản Tin",
+      "newsletter.desc": "Nhận thông báo cập nhật về nội dung mới nhất vào email của bạn.",
+      "newsletter.placeholder": "Email của bạn...",
+      "newsletter.button": "Đăng ký",
+      "newsletter.success": "Đã đăng ký thành công!",
+      "newsletter.error": "Có lỗi xảy ra. Hãy thử lại."
     }
   },
   en: {
@@ -171,7 +177,13 @@ const resources = {
       "home.no_content": "No content available yet. Check back soon.",
       "home.read_full": "Read Full Post",
       "home.headless_cms": "Headless CMS",
-      "home.quick_read": "Quick Read Mode Ready"
+      "home.quick_read": "Quick Read Mode Ready",
+      "newsletter.title": "Newsletter",
+      "newsletter.desc": "Get notified about new content directly in your inbox.",
+      "newsletter.placeholder": "Your email...",
+      "newsletter.button": "Subscribe",
+      "newsletter.success": "Subscribed successfully!",
+      "newsletter.error": "An error occurred. Please try again."
     }
   }
 };

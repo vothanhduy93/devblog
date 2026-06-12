@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
-import { Edit, Trash2, Plus, FileText, Settings, LogOut, X, Save } from 'lucide-react';
-import { format } from 'date-fns';
+import { Edit, Trash2, Plus, FileText, Settings, LogOut, X, Save, BarChart3, TrendingUp, Search, Users, Zap } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import MDEditor from '@uiw/react-md-editor';
-import { fetchPosts, deletePost, createPost, updatePost } from '../services/api';
+import '@uiw/react-md-editor/markdown-editor.css';
+import '@uiw/react-markdown-preview/markdown.css';
+import { fetchPosts, deletePost, createPost, updatePost, fetchAnalytics, fetchSubscribers, saveDraft } from '../services/api';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 export default function AdminPage() {
   const { t } = useTranslation();
@@ -19,19 +22,49 @@ export default function AdminPage() {
     fontSize, setFontSize, layoutDensity, setLayoutDensity
   } = useAppStore();
   const [posts, setPosts] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'posts' | 'settings'>('posts');
+  const [analyticsData, setAnalyticsData] = useState<any[]>([]);
+  const [subscribersData, setSubscribersData] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'posts' | 'analytics' | 'settings'>('posts');
   
   // Form State
   const CATEGORIES = ['Technology', 'Design', 'Lifestyle', 'Business', 'Other'];
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<any>(null);
   const [formData, setFormData] = useState({ title: '', category: 'Technology', excerpt: '', content: '', tags: '', metaTitle: '', metaDescription: '', ogImage: '', targetKeyword: '' });
+  const [lastSavedInfo, setLastSavedInfo] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
   const loadPosts = async () => {
     try {
-      const data = await fetchPosts();
+      let data = await fetchPosts();
+      
+      if (data && data.length === 0) {
+        const demoPosts = Array.from({ length: 5 }).map((_, i) => ({
+          title: `Demo Post ${i + 1}: Exploring Modern Design`,
+          slug: `demo-post-${i + 1}-${Date.now()}`,
+          excerpt: 'This automatically generated post showcases the features of our beautifully crafted platform.',
+          content: '## Understanding Modern Architectures\n\nThis is a sample post body highlighting clean typography.\n\n### Key Benefits\n- Lightning fast server-side rendering\n- Optimal bundle size and code splitting\n- High-contrast, accessible visual design\n\n*Enjoy exploring this elegant interface.*',
+          category: CATEGORIES[i % CATEGORIES.length],
+          language: 'en',
+          status: 'published',
+          author: auth.currentUser?.email || 'Admin',
+          metaTitle: 'Demo Metadata Title',
+          metaDescription: 'Demo meta description for SEO purposes.',
+          targetKeyword: 'demo',
+          seoScore: Math.floor(Math.random() * 20) + 80,
+          date: new Date(Date.now() - i * 86400000).toISOString(),
+          tags: ['demo', 'technology'],
+          readTime: Math.floor(Math.random() * 5) + 3
+        }));
+        
+        for (const p of demoPosts) {
+          await createPost(p);
+        }
+        
+        data = await fetchPosts();
+      }
+      
       setPosts(data);
     } catch (err) {
       console.error(err);
@@ -39,13 +72,40 @@ export default function AdminPage() {
     }
   };
 
-  useEffect(() => {
-    if (authInitialized && !isAuthenticated) {
-      navigate('/login');
-      return;
+  const loadAnalytics = async () => {
+    try {
+      const data = await fetchAnalytics();
+      setAnalyticsData(data);
+      const subs = await fetchSubscribers();
+      let runningTotal = 0;
+      const subsByDate = subs.reduce((acc: any, sub: any) => {
+        const date = sub.subscribeDate?.split('T')[0] || 'Unknown';
+        acc[date] = (acc[date] || 0) + 1;
+        return acc;
+      }, {});
+      const sortedDates = Object.keys(subsByDate).sort();
+      const cumulativeData = sortedDates.map(date => {
+        runningTotal += subsByDate[date];
+        return {
+          date: date === 'Unknown' ? 'Unknown' : format(parseISO(date), 'MMM dd'),
+          new: subsByDate[date],
+          total: runningTotal
+        };
+      });
+      setSubscribersData(cumulativeData);
+    } catch (err) {
+      console.error(err);
     }
-    if (authInitialized && isAuthenticated) {
+  };
+
+  useEffect(() => {
+    if (authInitialized) {
+      if (!isAuthenticated || auth.currentUser?.email !== 'hcmc.duyvo@gmail.com') {
+        navigate('/');
+        return;
+      }
       loadPosts();
+      loadAnalytics();
     }
   }, [authInitialized, isAuthenticated, navigate]);
 
@@ -81,6 +141,27 @@ export default function AdminPage() {
     setFormData({ title: '', category: 'Technology', excerpt: '', content: '', tags: '', metaTitle: '', metaDescription: '', ogImage: '', targetKeyword: '' });
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (isModalOpen) {
+      timeout = setInterval(() => {
+        const payload = {
+          ...formData,
+          editingPostId: editingPost?.id || 'new'
+        };
+        saveDraft(payload).then(() => {
+          setLastSavedInfo(`Draft auto-saved at ${format(new Date(), 'HH:mm:ss')}`);
+        }).catch(console.error);
+      }, 30000);
+    } else {
+      setLastSavedInfo(null);
+    }
+    
+    return () => {
+      if (timeout) clearInterval(timeout);
+    };
+  }, [isModalOpen, formData, editingPost]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +294,7 @@ export default function AdminPage() {
           </h1>
           <p className="text-sm text-zinc-500 mt-1">{t('admin.subtitle')}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <button onClick={handleNew} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
             <Plus className="w-4 h-4" /> {t('admin.new_post')}
           </button>
@@ -237,6 +318,12 @@ export default function AdminPage() {
             className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'posts' ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400'}`}
           >
             <FileText className="w-4 h-4" /> {t('admin.posts')}
+          </button>
+          <button 
+            onClick={() => setActiveTab('analytics')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400'}`}
+          >
+            <BarChart3 className="w-4 h-4" /> {t('Analytics')}
           </button>
           <button 
             onClick={() => setActiveTab('settings')}
@@ -296,6 +383,119 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none flex flex-col justify-center">
+                  <div className="flex items-center gap-3 text-zinc-500 mb-2 font-medium text-sm">
+                    <TrendingUp className="w-4 h-4" /> Total Views
+                  </div>
+                  <div className="text-4xl font-bold text-zinc-900 dark:text-white">
+                    {posts.reduce((sum, post) => sum + (post.views || 0), 0)}
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none flex flex-col justify-center">
+                  <div className="flex items-center gap-3 text-zinc-500 mb-2 font-medium text-sm">
+                    <FileText className="w-4 h-4" /> Total Posts
+                  </div>
+                  <div className="text-4xl font-bold text-zinc-900 dark:text-white">
+                    {posts.length}
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none flex flex-col justify-center">
+                  <div className="flex items-center gap-3 text-zinc-500 mb-2 font-medium text-sm">
+                    <Search className="w-4 h-4" /> Avg Views/Post
+                  </div>
+                  <div className="text-4xl font-bold text-zinc-900 dark:text-white">
+                    {posts.length ? Math.round(posts.reduce((sum, post) => sum + (post.views || 0), 0) / posts.length) : 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-6">Views Over Time</h3>
+                {analyticsData.length > 0 ? (
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={analyticsData}>
+                        <defs>
+                          <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: theme === 'dark' ? '#18181b' : '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                          itemStyle={{ color: '#3b82f6' }}
+                        />
+                        <Area type="monotone" dataKey="views" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorViews)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-72 w-full flex items-center justify-center text-sm text-zinc-500">
+                    Not enough data yet
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-6">Most Popular Articles</h3>
+                {posts.filter(p => p.views > 0).length > 0 ? (
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[...posts].sort((a,b) => (b.views || 0) - (a.views || 0)).slice(0, 5)} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                        <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis dataKey="title" type="category" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={150} tickFormatter={(value) => value.length > 20 ? value.substring(0, 20) + '...' : value} />
+                        <RechartsTooltip 
+                          cursor={{fill: theme === 'dark' ? '#27272a' : '#f4f4f5'}}
+                          contentStyle={{ backgroundColor: theme === 'dark' ? '#18181b' : '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Bar dataKey="views" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-72 w-full flex items-center justify-center text-sm text-zinc-500">
+                    No views computed yet
+                  </div>
+                )}
+              </div>
+              
+              <div className="col-span-1 lg:col-span-2 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm dark:shadow-none">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-6 flex items-center gap-2"><Users className="w-5 h-5 text-green-500" /> Newsletter Subscribers</h3>
+                {subscribersData.length > 0 ? (
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={subscribersData}>
+                        <defs>
+                          <linearGradient id="colorSubs" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#3f3f46' : '#e4e4e7'} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: theme === 'dark' ? '#18181b' : '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                          itemStyle={{ color: '#22c55e' }}
+                        />
+                        <Area type="monotone" dataKey="total" name="Total Subscribers" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorSubs)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-72 w-full flex items-center justify-center text-sm text-zinc-500">
+                    No subscribers yet
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {activeTab === 'settings' && (
@@ -379,14 +579,19 @@ export default function AdminPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-6 border-b border-zinc-200 dark:border-zinc-800">
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{editingPost ? t('admin.edit_post') : t('admin.create_post')}</h2>
+            <div className="flex justify-between items-center p-6 shrink-0 border-b border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center gap-4">
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{editingPost ? t('admin.edit_post') : t('admin.create_post')}</h2>
+                {lastSavedInfo && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">{lastSavedInfo}</span>
+                )}
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 overflow-hidden flex-1 flex flex-col gap-4 max-h-[85vh]">
+            <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 min-h-0 flex flex-col gap-4">
               <div className="flex gap-4 mb-2">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">{t('admin.form_title')}</label>

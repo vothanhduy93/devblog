@@ -13,7 +13,11 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (isAuthenticated) {
-      navigate('/admin');
+      if (auth.currentUser?.email === 'hcmc.duyvo@gmail.com') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
     }
   }, [isAuthenticated, navigate]);
 
@@ -26,7 +30,11 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, provider);
       if (result.user) {
         setIsAuthenticated(true);
-        navigate('/admin');
+        if (result.user.email === 'hcmc.duyvo@gmail.com') {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
       }
     } catch (error: any) {
       console.error('Login Error:', error);
